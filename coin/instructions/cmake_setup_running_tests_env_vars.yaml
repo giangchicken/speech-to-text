@@ -1,0 +1,79 @@
+type: Group
+instructions:
+  # Informs qtestblacklist.cpp that tests are run in the CI.
+  # A related QT_BUILD_ENVIRONMENT env var is set during an integration's build phase.
+  - type: EnvironmentVariable
+    variableName: QTEST_ENVIRONMENT
+    variableValue: "ci"
+  - type: WriteFile
+    fileContents: |
+        #!/usr/bin/python3
+        import subprocess
+        import calendar
+        import datetime
+        import time
+        import sys
+        import os
+        import re
+        from os.path import expanduser
+        home = expanduser("~")
+
+        file=os.path.basename(sys.argv[1])
+        timestamp = str(round(time.time() * 1000))
+        results_file = home + "/work/testresults/" + file +"-" + timestamp + ".xml,xml"
+        testargs = ["-o", results_file, "-o", "-,txt"]
+        if re.search("testlib.selftests.tst_selftests", sys.argv[1]):
+            testargs = []
+        exit(subprocess.call([sys.argv[1]] + testargs))
+    filename: "{{.SourceDir}}/coin_ctest_runner.py"
+    fileMode: 755
+  - type: ExecuteCommand
+    command: "chmod 755 {{.SourceDir}}/coin_ctest_runner.py"
+    maxTimeInSeconds: 10
+    maxTimeBetweenOutput: 10
+    userMessageOnFailure: >
+      Failed to change file permission.
+    disable_if:
+      condition: property
+      property: host.os
+      equals_value: Windows
+  - type: Group
+    instructions:
+      - type: EnvironmentVariable
+        variableName: TESTS_ENV_PREFIX
+        variableValue: "{{.Env.ENV_PREFIX}}"
+    enable_if:
+      condition: and
+      conditions:
+        - condition: property
+          property: host.os
+          equals_property: target.os
+        - condition: property
+          property: target.osVersion
+          not_in_values: [QEMU, QNX_710]
+  - type: Group
+    instructions:
+      - type: EnvironmentVariable
+        variableName: TESTS_ENV_PREFIX
+        variableValue: "{{.Env.TARGET_ENV_PREFIX}}"
+    disable_if:
+      condition: and
+      conditions:
+        - condition: property
+          property: host.os
+          equals_property: target.os
+        - condition: property
+          property: target.osVersion
+          not_in_values: [QEMU, QNX_710]
+  - type: Group
+    instructions:
+      - !include "{{qt/qtbase}}/cmake_setup_running_qnxqemu_tests_env_vars.yaml"
+    enable_if:
+      condition: and
+      conditions:
+        - condition: property
+          property: target.osVersion
+          equals_value: QNX_710
+        - condition: property
+          property: features
+          not_contains_value: DisableTests
